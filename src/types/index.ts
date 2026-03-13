@@ -36,7 +36,7 @@ export interface Format {
     suitableFor: Audience[];
     duration: Duration[];
     resources: Resource[];
-    complexity: Complexity;
+    complexity: 'low' | 'medium' | 'high';
     tags?: string[];
     example: string;
 }
@@ -44,7 +44,7 @@ export interface Format {
 export interface FormatsByComplexity {
     easy: Format[];
     medium: Format[];
-    complex: Format[];
+    hard: Format[];
     all: Format[];
 }
 
@@ -95,4 +95,26 @@ export interface SaveAnswerRequest {
     sessionId: string;
     questionId: string;
     answer: any;
+}
+
+// Добавим тип для ответов
+export interface Answers {
+    theme?: string;
+    audience?: string;
+    goal?: string;
+    duration?: string;
+    resources?: string[];
+    [key: string]: any;
+}
+
+// Тип для плана мероприятия
+export interface EventPlan {
+    title: string;
+    audience: string;
+    goal: string;
+    duration: string;
+    suitableFormats: string;
+    recommendations: string[];
+    structure: string[];
+    checklist: string[];
 }

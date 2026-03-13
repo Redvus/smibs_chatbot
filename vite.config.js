@@ -58,7 +58,7 @@ export default defineConfig({
                 },
                 manualChunks: {
                     vendor: ["react", "react-dom"],
-                    gsap: ["gsap"],
+                    // gsap: ["gsap"],
                     mui: [
                         "@mui/material",
                         "@mui/icons-material",
