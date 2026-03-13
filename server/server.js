@@ -485,6 +485,15 @@ app.post("/api/answer", (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`🚀 Сервер запущен на http://localhost:${PORT}`);
-});
+export default app;
+
+// А для локальной разработки порт можно слушать условно:
+if (process.env.NODE_ENV !== "production") {
+    app.listen(PORT, () => {
+        console.log(`🚀 Сервер запущен на http://localhost:${PORT}`);
+    });
+}
+
+// app.listen(PORT, () => {
+//     console.log(`🚀 Сервер запущен на http://localhost:${PORT}`);
+// });
