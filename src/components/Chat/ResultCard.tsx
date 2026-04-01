@@ -9,36 +9,54 @@ import {
     AccordionDetails,
     Chip,
     Box,
-    Button
+    Button,
+    Alert,
+    Snackbar
 } from '@mui/material';
 import {
     ExpandMore as ExpandMoreIcon,
     Download as DownloadIcon,
-    Print as PrintIcon
+    Print as PrintIcon,
+    Save as SaveIcon,
+    PictureAsPdf as PdfIcon
 } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import type { Format, FormatsByComplexity } from '../../types';
+import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { exportPlanToPDF } from '../../utils/pdfExport';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 
 interface ResultCardProps {
     result: FormatsByComplexity | Record<string, any> | string | null;
+    onReset?: () => void;  // ← добавить для кнопки "Начать заново"
 }
 
-// Тип для формата с возможными дополнительными полями
 interface ExtendedFormat extends Format {
     tags?: string[];
 }
 
-const ResultCard: React.FC<ResultCardProps> = ({ result }) => {
-    const handleExport = () => {
-        const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'plan.json';
-        a.click();
+interface SavedPlan {
+    id: number;
+    title: string;
+    date: string;
+    content: any;
+}
+
+const ResultCard: React.FC<ResultCardProps> = ({ result, onReset }) => {
+    const [openSnackbar, setOpenSnackbar] = React.useState(false);
+    const [snackbarMessage, setSnackbarMessage] = React.useState('');
+
+    // Хук для сохранения планов
+    const [savedPlans, setSavedPlans] = useLocalStorage<SavedPlan[]>('savedPlans', []);
+
+    // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+
+    const showMessage = (message: string) => {
+        setSnackbarMessage(message);
+        setOpenSnackbar(true);
+        setTimeout(() => setOpenSnackbar(false), 3000);
     };
 
-    // Функция для безопасного преобразования в строку
     const safeString = (value: unknown): string => {
         if (value === null || value === undefined) return '';
         if (typeof value === 'string') return value;
@@ -46,11 +64,74 @@ const ResultCard: React.FC<ResultCardProps> = ({ result }) => {
         return String(value);
     };
 
-    // Проверка, является ли результат объектом с форматами
+    // Проверяем, является ли результат сообщением об ошибке
+    const isErrorResult = (res: any): boolean => {
+        if (typeof res === 'string') {
+            // Проверяем наличие ключевых фраз в сообщении об ошибке
+            return res.includes('Тема не распознана') ||
+                res.includes('❌ **Тема не распознана**') ||
+                res.includes('не удалось определить тему');
+        }
+        return false;
+    };
+
+    const getResultTitle = (res: any): string => {
+        if (typeof res === 'string') {
+            const titleMatch = res.match(/## 📋 План мероприятия: "(.+?)"/);
+            return titleMatch ? titleMatch[1] : 'План мероприятия';
+        }
+        if (res && typeof res === 'object') {
+            return res.title || 'План мероприятия';
+        }
+        return 'План мероприятия';
+    };
+
     const isFormatsResult = (res: any): res is FormatsByComplexity => {
         return res && typeof res === 'object' && ('easy' in res || 'medium' in res || 'hard' in res || 'all' in res);
     };
 
+    // ========== ОБРАБОТЧИКИ ==========
+
+    const handleExport = () => {
+        const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'plan.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        showMessage('JSON экспортирован');
+    };
+
+    const handleExportPDF = async () => {
+        if (typeof result === 'string') {
+            const title = getResultTitle(result);
+            // Ждём, пока элемент отрендерится
+            await new Promise(resolve => setTimeout(resolve, 100));
+            await exportPlanToPDF('pdf-content', title);
+            showMessage('PDF создаётся...');
+        } else {
+            showMessage('PDF доступен только для текстовых планов');
+        }
+    };
+
+    const handleSave = () => {
+        try {
+            const newPlan: SavedPlan = {
+                id: Date.now(),
+                title: getResultTitle(result),
+                date: new Date().toLocaleString('ru-RU'),
+                content: result
+            };
+            setSavedPlans([...savedPlans, newPlan]);
+            showMessage('План сохранён!');
+        } catch (error) {
+            console.error('Ошибка сохранения:', error);
+            showMessage('Ошибка сохранения');
+        }
+    };
+
+    // ========== РЕНДЕР ФОРМАТОВ ==========
     const renderFormats = (formats: ExtendedFormat[] | undefined, title: string): React.ReactNode => {
         if (!formats || formats.length === 0) return null;
 
@@ -88,7 +169,51 @@ const ResultCard: React.FC<ResultCardProps> = ({ result }) => {
         );
     };
 
-    // Если результат - null или undefined
+    // ========== ОБЩИЙ БЛОК КНОПОК ==========
+    const ActionButtons = () => (
+        <Box sx={{ display: 'flex', gap: 2, mt: 2, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleExport} size="small">
+                Экспорт JSON
+            </Button>
+            <Button variant="outlined" startIcon={<PdfIcon />} onClick={handleExportPDF} size="small">
+                Экспорт PDF
+            </Button>
+            <Button variant="contained" startIcon={<SaveIcon />} onClick={handleSave} color="success" size="small">
+                Сохранить план
+            </Button>
+            <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => window.print()} size="small">
+                Печать
+            </Button>
+        </Box>
+    );
+
+    // В рендере, перед основным return, добавим проверку на ошибку:
+    if (isErrorResult(result)) {
+        console.log('🔴 Показываем ошибку валидации');
+        return (
+            <Card sx={{ mt: 2, border: '1px solid #f44336', backgroundColor: '#ffebee' }}>
+                <CardContent>
+                    <ReactMarkdown>
+                        {safeString(result)}
+                    </ReactMarkdown>
+                    {onReset && (
+                        <Button
+                            variant="contained"
+                            startIcon={<RestartAltIcon />}
+                            onClick={onReset}
+                            color="primary"
+                            sx={{ mt: 2 }}
+                        >
+                            Начать заново
+                        </Button>
+                    )}
+                </CardContent>
+            </Card>
+        );
+    }
+
+    // ========== РЕНДЕРИНГ ==========
+
     if (!result) {
         return (
             <Card sx={{ mt: 2 }}>
@@ -99,7 +224,7 @@ const ResultCard: React.FC<ResultCardProps> = ({ result }) => {
         );
     }
 
-    // Если результат - объект с форматами (режим конструктора)
+    // Режим форматов
     if (isFormatsResult(result)) {
         return (
             <Card sx={{ mt: 2 }}>
@@ -113,37 +238,39 @@ const ResultCard: React.FC<ResultCardProps> = ({ result }) => {
                     {renderFormats(result.hard, '🎯 Требуют подготовки')}
                     {renderFormats(result.all, '📋 Все форматы')}
 
-                    <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-                        <Button
-                            variant="contained"
-                            startIcon={<DownloadIcon />}
-                            onClick={handleExport}
-                        >
-                            Сохранить
-                        </Button>
-                        <Button
-                            variant="outlined"
-                            startIcon={<PrintIcon />}
-                            onClick={() => window.print()}
-                        >
-                            Печать
-                        </Button>
-                    </Box>
+                    <ActionButtons />
+
+                    <Snackbar open={openSnackbar} autoHideDuration={3000} onClose={() => setOpenSnackbar(false)}>
+                        <Alert severity="success" sx={{ width: '100%' }}>
+                            {snackbarMessage}
+                        </Alert>
+                    </Snackbar>
                 </CardContent>
             </Card>
         );
     }
 
-    // Если результат - строка или другой тип
+    // Режим текстового плана (основной)
     return (
         <Card sx={{ mt: 2 }}>
             <CardContent>
-                <Typography variant="h5" gutterBottom>
+                {/* <Typography variant="h5" gutterBottom>
                     Результат
-                </Typography>
-                <ReactMarkdown>
-                    {safeString(result)}
-                </ReactMarkdown>
+                </Typography> */}
+
+                <div id="pdf-content" style={{ padding: '4rem', background: 'white' }}>
+                    <ReactMarkdown>
+                        {safeString(result)}
+                    </ReactMarkdown>
+                </div>
+
+                <ActionButtons />
+
+                <Snackbar open={openSnackbar} autoHideDuration={3000} onClose={() => setOpenSnackbar(false)}>
+                    <Alert severity="success" sx={{ width: '100%' }}>
+                        {snackbarMessage}
+                    </Alert>
+                </Snackbar>
             </CardContent>
         </Card>
     );

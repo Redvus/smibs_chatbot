@@ -75,22 +75,14 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
 
         case 'RECEIVE_RESPONSE':
             if (action.payload.completed) {
-                const resultText = typeof action.payload.result === 'object'
-                    ? JSON.stringify(action.payload.result, null, 2)
-                    : String(action.payload.result);
-
+                // НЕ добавляем сообщение в messages, только сохраняем result
                 return {
                     ...state,
-                    messages: [...state.messages, {
-                        id: Date.now(),
-                        text: resultText,
-                        sender: 'bot',
-                        type: 'result'
-                    }],
                     loading: false,
                     completed: true,
                     result: action.payload.result,
                     currentQuestion: null
+                    // messages НЕ меняем
                 };
             } else if (action.payload.question) {
                 return {

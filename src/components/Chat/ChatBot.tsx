@@ -22,51 +22,51 @@ import type { BotMode } from '../../types';
 
 // Стилизованные компоненты
 const ChatContainer = styled(Paper)`
-  max-width: 800px;
-  margin: 20px auto;
-  height: 600px;
-  display: flex;
-  flex-direction: column;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    max-width: 800px;
+    margin: 20px auto;
+    min-height: 600px;  // ← меняем height на min-height
+    display: flex;
+    flex-direction: column;
+    border-radius: 12px;
+    overflow: auto;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
 `;
 
 const ChatHeader = styled(Box)`
-  background: #2c3e50;
-  color: white;
-  padding: 16px 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid #34495e;
+    background: #2c3e50;
+    color: white;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid #34495e;
 `;
 
 const MessagesContainer = styled(Box)`
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-  background: #f8f9fa;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    background: #f8f9fa;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 `;
 
 const InputContainer = styled(Box)`
-  padding: 20px;
-  background: white;
-  border-top: 1px solid #e0e0e0;
-  display: flex;
-  gap: 12px;
+    padding: 20px;
+    background: white;
+    border-top: 1px solid #e0e0e0;
+    display: flex;
+    gap: 12px;
 `;
 
 const TypingIndicator = styled(Box)`
-  display: flex;
-  gap: 4px;
-  padding: 12px;
-  background: #e9ecef;
-  border-radius: 18px;
-  width: fit-content;
+    display: flex;
+    gap: 4px;
+    padding: 12px;
+    background: #e9ecef;
+    border-radius: 18px;
+    width: fit-content;
 
   span {
     width: 8px;
@@ -143,6 +143,13 @@ const ChatBot: React.FC = () => {
         return <ModeSelector onSelect={handleModeSelect} />;
     }
 
+    const handleReset = () => {
+        // Сбрасываем состояние чата
+        window.location.reload(); // Простой способ
+        // Или более изящный:
+        // startSession(mode); // если хотите сохранить режим
+    };
+
     return (
         <ChatContainer elevation={3}>
             <ChatHeader>
@@ -172,12 +179,21 @@ const ChatBot: React.FC = () => {
                     </Typography>
                 )}
 
-                {completed && result && (
-                    <ResultCard result={result} />
-                )}
+                {/* {completed && result && (
+                    <ResultCard
+                        key="result-card"  // ← добавить уникальный ключ
+                        result={result}
+                        onReset={handleReset}
+                    />
+                )} */}
 
                 <div ref={messagesEndRef} />
             </MessagesContainer>
+
+            {/* Результат показываем ОДИН раз, вне MessagesContainer */}
+            {completed && result && (
+                <ResultCard result={result} onReset={handleReset} />
+            )}
 
             {currentQuestion && !completed && (
                 <Box sx={{ p: 2, background: '#f8f9fa' }}>
