@@ -333,8 +333,6 @@ const eventKeywords = {
     },
 };
 
-// server/server.js — добавьте после knowledgeBase
-
 // Ключевые слова для валидации темы (библиотечные мероприятия)
 const validThemeKeywords = [
     // Мероприятия
@@ -571,11 +569,16 @@ function getCurrentSeason() {
 }
 
 function generatePlan(answers) {
-    const { theme, audience, goal, duration, resources } = answers;
+    const { eventType, theme, audience, goal, duration, resources } = answers;
 
-    // Определяем тип мероприятия по теме
-    const eventType = detectEventType(theme);
-    const typeData = eventKeywords[eventType];
+    // Используем выбранный тип мероприятия
+    const typeData = eventKeywords[eventType] || eventKeywords.lecture;
+
+    // Формируем название темы (если пользователь ввёл)
+    const themeTitle =
+        theme && theme.trim() !== ""
+            ? `"${theme}"`
+            : `мероприятие типа ${typeData.name || eventType}`;
 
     // Получаем информацию об аудитории
     const audienceInfo = knowledgeBase.audiences[audience] || {
@@ -610,8 +613,7 @@ function generatePlan(answers) {
     };
     const durationText = durationMap[duration] || duration;
 
-    // ========== ВАЖНО: определяем structure ЗДЕСЬ ==========
-    // Выбираем структуру в зависимости от типа мероприятия
+    // Структура из выбранного типа
     let structure = typeData
         ? [...typeData.structure]
         : [
@@ -634,34 +636,7 @@ function generatePlan(answers) {
     // Подходящие форматы
     const suitableFormats =
         Object.values(knowledgeBase.formats)
-            .filter((format) => {
-                // Проверка по аудитории
-                if (!format.suitableFor.includes(audience)) return false;
-                // Проверка по типу мероприятия (если есть соответствие)
-                if (
-                    eventType !== "lecture" &&
-                    format.name.toLowerCase().includes(eventType)
-                )
-                    return true;
-                if (
-                    eventType === "lecture" &&
-                    (format.name === "Лекция с презентацией" ||
-                        format.name === "Дискуссионный клуб")
-                )
-                    return true;
-                if (
-                    eventType === "quest" &&
-                    format.name === "Библиотечный квест"
-                )
-                    return true;
-                if (
-                    eventType === "contest" &&
-                    (format.name === "Поэтический слэм" ||
-                        format.name === "Литературный квиз")
-                )
-                    return true;
-                return false;
-            })
+            .filter((format) => format.suitableFor.includes(audience))
             .map((f) => f.name)
             .join(", ") || "различные форматы";
 
@@ -669,7 +644,7 @@ function generatePlan(answers) {
     const allRecommendations = [
         `Для ${audienceInfo.name}: ${audienceInfo.tips.join("; ")}`,
         typeData
-            ? `Для этого типа мероприятия (${eventType}): ${typeData.tips.join("; ")}`
+            ? `Советы для этого формата: ${typeData.tips.join("; ")}`
             : null,
         resourcesList.length > 0
             ? `Используйте доступные ресурсы: ${resourcesList.join(", ")}`
@@ -680,13 +655,13 @@ function generatePlan(answers) {
 
     // Формируем итоговый план
     const plan = {
-        title: theme,
+        title: themeTitle,
         type: eventType,
         audience: audienceInfo.name,
         goal: knowledgeBase.goals[goal] || goal,
         duration: durationText,
         suitableFormats: suitableFormats,
-        structure: structure, // ← теперь structure определена!
+        structure: structure,
         recommendations: allRecommendations,
         checklist: [
             "✓ Подготовить сценарий",
@@ -707,7 +682,7 @@ function generatePlan(answers) {
 // Функция для форматирования плана в читаемый текст
 function formatPlanAsText(plan) {
     return `
-## 📋 План мероприятия: "${plan.title}"
+## 📋 План мероприятия: ${plan.title}
 
 ### 👥 Аудитория
 **${plan.audience}**
@@ -814,10 +789,26 @@ function getRecommendedFormats(audience, goal, duration) {
 // Вопросы для режима планирования
 const plannerQuestions = [
     {
+        id: "eventType",
+        text: "Какой тип мероприятия вы планируете?",
+        type: "options",
+        options: [
+            { value: "quest", label: "🎯 Квест / игра-путешествие" },
+            { value: "quiz", label: "🧠 Квиз / викторина" },
+            { value: "lecture", label: "📚 Лекция / презентация" },
+            { value: "masterclass", label: "🎨 Мастер-класс / творчество" },
+            { value: "discussion", label: "💬 Дискуссия / круглый стол" },
+            { value: "holiday", label: "🎉 Праздник / утренник" },
+            { value: "contest", label: "🏆 Конкурс / соревнование" },
+        ],
+        next: "theme",
+    },
+    {
         id: "theme",
-        text: "Какая тема мероприятия?",
+        text: "Уточните тему мероприятия (например, 'Пушкин', 'космос', 'экология'):",
         type: "text",
         next: "audience",
+        description: "Это поможет сделать план более персонализированным",
     },
     {
         id: "audience",
@@ -923,18 +914,18 @@ app.post("/api/answer", (req, res) => {
     session.answers[questionId] = answer;
 
     // Проверяем тему, если это первый вопрос
-    if (questionId === "theme") {
-        if (!isValidTheme(answer)) {
-            // Тема не подходит — возвращаем ошибку
-            console.log(`❌ Тема не прошла валидацию: "${answer}"`);
-            res.json({
-                completed: true,
-                result: getThemeErrorMessage(answer), // ← передаём answer
-            });
-            return;
-        }
-        console.log(`✅ Тема прошла валидацию: "${answer}"`);
-    }
+    // if (questionId === "theme") {
+    //     if (!isValidTheme(answer)) {
+    //         // Тема не подходит — возвращаем ошибку
+    //         console.log(`❌ Тема не прошла валидацию: "${answer}"`);
+    //         res.json({
+    //             completed: true,
+    //             result: getThemeErrorMessage(answer), // ← передаём answer
+    //         });
+    //         return;
+    //     }
+    //     console.log(`✅ Тема прошла валидацию: "${answer}"`);
+    // }
 
     // Переходим к следующему вопросу
     const currentIndex = session.currentQuestionIndex;
